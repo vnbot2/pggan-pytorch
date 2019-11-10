@@ -55,15 +55,17 @@ class trainer:
         print ('Discriminator structure: ')
         print(self.D.model)
         self.mse = torch.nn.MSELoss()
+        n_gpu = torch.cuda.device_count()
+        print('n_GPU:', n_gpu)
         if self.use_cuda:
             self.mse = self.mse.cuda()
             torch.cuda.manual_seed(config.random_seed)
-            if config.n_gpu==1:
+            if n_gpu==1:
                 self.G = torch.nn.DataParallel(self.G).cuda(device=0)
                 self.D = torch.nn.DataParallel(self.D).cuda(device=0)
             else:
                 gpus = []
-                for i  in range(config.n_gpu):
+                for i  in range(n_gpu):
                     gpus.append(i)
                 self.G = torch.nn.DataParallel(self.G, device_ids=gpus).cuda()
                 self.D = torch.nn.DataParallel(self.D, device_ids=gpus).cuda()  
@@ -147,9 +149,13 @@ class trainer:
             # grow network.
             if floor(self.resl) != prev_resl and floor(self.resl)<self.max_resl+1:
                 self.lr = self.lr * float(self.config.lr_decay)
-                self.G.grow_network(floor(self.resl))
-                #self.Gs.grow_network(floor(self.resl))
-                self.D.grow_network(floor(self.resl))
+                if hasattr(self.G, 'module'):
+                    self.G.module.grow_network(floor(self.resl))
+                    self.D.module.grow_network(floor(self.resl))
+
+                else:
+                    self.G.grow_network(floor(self.resl))
+                    self.D.grow_network(floor(self.resl))
                 self.renew_everything()
                 self.fadein['gen'] = dict(self.G.model.named_children())['fadein_block']
                 self.fadein['dis'] = dict(self.D.model.named_children())['fadein_block']
@@ -294,7 +300,8 @@ class trainer:
                     os.makedirs('repo/save/grid', exist_ok=True)
                     utils.save_image_grid(x_test.data, 'repo/save/grid/{}_{}_G{}_D{}.jpg'.format(int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
                     os.makedirs('repo/save/resl_{}'.format(int(floor(self.resl))), exist_ok=True)
-                    utils.save_image_single(x_test.data, 'repo/save/resl_{}/{}_{}_G{}_D{}.jpg'.format(int(floor(self.resl)),int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
+                    utils.save_image_single(x_test.data, 'repo/save/resl_{}/{}_{}_G{}_D{}.jpg'.format(
+                        int(floor(self.resl)),int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
 
                 # tensorboard visualization.
                 if self.use_tb:
