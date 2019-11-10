@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 from PIL import Image
 
 
-class dataloader:
+class CustomDataloader:
     def __init__(self, config):
         self.root = config.train_data_root
         self.batch_table = {4:32, 8:32, 16:32, 32:16, 64:16, 128:16, 256:12, 512:3, 1024:1} # change this according to available gpu memory.
@@ -33,25 +33,26 @@ class dataloader:
                                                     transforms.ToTensor(),
                                                     ]))
 
-        self.dataloader = DataLoader(
+        self.dl = DataLoader(
             dataset=self.dataset,
             batch_size=self.batchsize,
-            shuffle=True,
-            num_workers=self.num_workers
-        )
+            shuffle=True)
+            # num_workers=self.num_workers)
+        # for data in self.dl:break
+        # import ipdb; ipdb.set_trace()
 
     def __iter__(self):
-        return iter(self.dataloader)
+        return iter(self.dl)
     
     def __next__(self):
-        return next(self.dataloader)
+        return next(self.dl)
 
     def __len__(self):
-        return len(self.dataloader.dataset)
+        return len(self.dl.dataset)
 
        
     def get_batch(self):
-        dataIter = iter(self.dataloader)
+        dataIter = iter(self.dl)
         return next(dataIter)[0].mul(2).add(-1)         # pixel range [-1, 1]
 
 

@@ -1,5 +1,5 @@
 # ignore this files when commit.
-
+data
 # data files.
 *.h5
 *.hdf5

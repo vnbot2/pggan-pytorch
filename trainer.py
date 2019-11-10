@@ -164,7 +164,7 @@ class trainer:
             
     def renew_everything(self):
         # renew dataloader.
-        self.loader = DL.dataloader(config)
+        self.loader = DL.CustomDataloader(config)
         self.loader.renew(min(floor(self.resl), self.max_resl))
         
         # define tensors
@@ -173,7 +173,7 @@ class trainer:
         self.x_tilde = torch.FloatTensor(self.loader.batchsize, 3, self.loader.imsize, self.loader.imsize)
         self.real_label = torch.FloatTensor(self.loader.batchsize).fill_(1)
         self.fake_label = torch.FloatTensor(self.loader.batchsize).fill_(0)
-		
+        
         # enable cuda
         if self.use_cuda:
             self.z = self.z.cuda()
@@ -239,7 +239,8 @@ class trainer:
         self.z_test = torch.FloatTensor(self.loader.batchsize, self.nz)
         if self.use_cuda:
             self.z_test = self.z_test.cuda()
-        self.z_test = Variable(self.z_test, volatile=True)
+        # self.z_test = Variable(self.z_test, volatile=True)
+        # self.z_test = torch.from_numpy(self.z_test)
         self.z_test.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
         
         for step in range(2, self.max_resl+1+5):
@@ -258,6 +259,7 @@ class trainer:
                 self.D.zero_grad()
 
                 # update discriminator.
+                # import ipdb; ipdb.set_trace()
                 self.x.data = self.feed_interpolated_input(self.loader.get_batch())
                 if self.flag_add_noise:
                     self.x = self.add_noise(self.x)
@@ -265,9 +267,9 @@ class trainer:
                 self.x_tilde = self.G(self.z)
                
                 self.fx = self.D(self.x)
-                self.fx_tilde = self.D(self.x_tilde.detach())
+                self.fx_tilde = self.D(self.x_tilde.detach()).squeeze()
                 
-		        loss_d = self.mse(self.fx.squeeze(), self.real_label) + \
+                loss_d = self.mse(self.fx.squeeze(), self.real_label) + \
                                   self.mse(self.fx_tilde, self.fake_label)
                 loss_d.backward()
                 self.opt_d.step()
@@ -289,17 +291,17 @@ class trainer:
                 if self.globalIter%self.config.save_img_every == 0:
                     with torch.no_grad():
                         x_test = self.G(self.z_test)
-                    utils.mkdir('repo/save/grid')
+                    os.makedirs('repo/save/grid', exist_ok=True)
                     utils.save_image_grid(x_test.data, 'repo/save/grid/{}_{}_G{}_D{}.jpg'.format(int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
-                    utils.mkdir('repo/save/resl_{}'.format(int(floor(self.resl))))
+                    os.makedirs('repo/save/resl_{}'.format(int(floor(self.resl))), exist_ok=True)
                     utils.save_image_single(x_test.data, 'repo/save/resl_{}/{}_{}_G{}_D{}.jpg'.format(int(floor(self.resl)),int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
 
                 # tensorboard visualization.
                 if self.use_tb:
                     with torch.no_grad():
                         x_test = self.G(self.z_test)
-                    self.tb.add_scalar('data/loss_g', loss_g[0].item(), self.globalIter)
-                    self.tb.add_scalar('data/loss_d', loss_d[0].item(), self.globalIter)
+                    self.tb.add_scalar('data/loss_g', loss_g.item(), self.globalIter)
+                    self.tb.add_scalar('data/loss_d', loss_d.item(), self.globalIter)
                     self.tb.add_scalar('tick/lr', self.lr, self.globalIter)
                     self.tb.add_scalar('tick/cur_resl', int(pow(2,floor(self.resl))), self.globalIter)
                     '''IMAGE GRID
@@ -343,11 +345,12 @@ class trainer:
 
 
     def snapshot(self, path):
-        if not os.path.exists(path):
-            if os.name == 'nt':
-                os.system('mkdir {}'.format(path.replace('/', '\\')))
-            else:
-                os.system('mkdir -p {}'.format(path))
+        os.makedirs(path, exist_ok=True)
+        # if not os.path.exists(path):
+        #     if os.name == 'nt':
+        #         os.system('mkdir {}'.format(path.replace('/', '\\')))
+        #     else:
+        #         os.system('mkdir -p {}'.format(path))
         # save every 100 tick if the network is in stab phase.
         ndis = 'dis_R{}_T{}.pth.tar'.format(int(floor(self.resl)), self.globalTick)
         ngen = 'gen_R{}_T{}.pth.tar'.format(int(floor(self.resl)), self.globalTick)
