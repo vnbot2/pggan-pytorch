@@ -68,10 +68,17 @@ class MotoDataset(Dataset):
         return img, 0
 
 
+def get_batch_size(size, bz_128=4):
+    num_pix = 128*128*bz_128
+    rt = int(num_pix)//(size*size)
+    print('size: {} -> Batchsize: {}'.format(size, rt))
+    return rt
+
 class CustomDataloader:
     def __init__(self, config):
         self.root = config.train_data_root
-        self.batch_table = {4:2048, 8:1024, 16:512, 32:256, 64:128, 128:64}
+        sizes = [4, 8, 16, 32, 64, 128]
+        self.batch_table = {size: get_batch_size(size) for size in sizes}
         self.batchsize = int(self.batch_table[pow(2,2)])*torch.cuda.device_count()        # we start from 2^2=4
         self.imsize = int(pow(2,2))
         self.num_workers = 4
@@ -83,7 +90,7 @@ class CustomDataloader:
         self.imsize = int(pow(2,resolution))
         _n_stick = (self.config.transition_tick*2+self.config.stablize_tick*2)
         _num_samples = self.batchsize * _n_stick
-        print('[*] Renew dataloader configuration, load data from {}.'.format(self.root), 'Num of sample:', _num_samples, '\tImsize:', self.imsize)
+        print('[*] Renew dataloader configuration, load data from {}.'.format(self.root), 'Num of sample:', _num_samples, '\tImsize:', self.imsize, '\t Batchsize:', self.batchsize)
         self.dataset = MotoDataset(self.root, size=(self.imsize,self.imsize), num_samples=_num_samples)
         self.dl = DataLoader(
             dataset=self.dataset,

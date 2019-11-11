@@ -101,18 +101,20 @@ class Trainer:
             self.resolution = max(2, min(10.5, self.resolution))        # clamping, range: 4 ~ 1024
 
             # flush network.
-            if self.flag_flush_gen and self.resolution%1.0 >= (self.transition_tick+self.stablize_tick)*delta and prev_resolution!=2:
+            if self.flag_flush_gen and self.resolution % 1.0 >= (self.transition_tick+self.stablize_tick)*delta and prev_resolution != 2:
                 if self.fadein['gen'] is not None:
                     self.fadein['gen'].update_alpha(d_alpha)
                     self.complete['gen'] = self.fadein['gen'].alpha*100
                 self.flag_flush_gen = False
                 self.G.module.flush_network()   # flush G
                 print(self.G.module.model)
-                #self.Gs.module.flush_network()         # flush Gs
                 self.fadein['gen'] = None
                 self.complete['gen'] = 0.0
                 self.phase = 'dtrns'
+                self.G = nn.DataParallel(self.G.module.cuda())
             elif self.flag_flush_dis and floor(self.resolution) != prev_resolution and prev_resolution!=2:
+                # import ipdb; ipdb.set_trace()
+                
                 if self.fadein['dis'] is not None:
                     self.fadein['dis'].update_alpha(d_alpha)
                     self.complete['dis'] = self.fadein['dis'].alpha*100
@@ -123,6 +125,7 @@ class Trainer:
                 self.complete['dis'] = 0.0
                 if floor(self.resolution) < self.max_resolution and self.phase != 'final':
                     self.phase = 'gtrns'
+                self.D = nn.DataParallel(self.D.module.cuda())
 
             # grow network.
             if floor(self.resolution) != prev_resolution and floor(self.resolution)<self.max_resolution+1:

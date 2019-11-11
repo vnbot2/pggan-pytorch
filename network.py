@@ -100,7 +100,7 @@ class Generator(nn.Module):
                 ndim = ndim/2
         ndim = int(ndim)
         layers = []
-        layers.append(nn.Upsample(scale_factor=2, mode='nearest'))       # scale up by factor of 2.0
+        layers.append(nn.Upsample(scale_factor=2, mode='bilinear'))       # scale up by factor of 2.0
         if halving:
             layers = deconv(layers, ndim*2, ndim, 3, 1, 1, self.flag_leaky, self.flag_bn, self.flag_wn, self.flag_pixelwise)
             layers = deconv(layers, ndim, ndim, 3, 1, 1, self.flag_leaky, self.flag_bn, self.flag_wn, self.flag_pixelwise)
@@ -136,7 +136,7 @@ class Generator(nn.Module):
             print('growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
             low_resolution_to_rgb = deepcopy_module(self.model, 'to_rgb_block')
             prev_block = nn.Sequential()
-            prev_block.add_module('low_resolution_upsample', nn.Upsample(scale_factor=2, mode='nearest'))
+            prev_block.add_module('low_resolution_upsample', nn.Upsample(scale_factor=2, mode='bilinear'))
             prev_block.add_module('low_resolution_to_rgb', low_resolution_to_rgb)
 
             inter_block, ndim, self.layer_name = self.intermediate_block(resolution)

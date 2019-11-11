@@ -29,12 +29,13 @@ def f(image_path):
     return img
 
 frame_array = multi_thread(f, image_paths, verbose=True)
-fourcc = cv2.VideoWriter_fourcc(*'XVID')
-out = cv2.VideoWriter(f'{args.output_path}.avi', fourcc, args.fps, size)
+# fourcc = cv2.VideoWriter_fourcc(*'XVID')
+fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+out = cv2.VideoWriter(f'{args.output_path}.mp4', fourcc, args.fps, size)
 
 
 for frame in frame_array:
     # writing to a image array
     out.write(frame)
 out.release()
-print('Save at:', args.output_path+'.avi')
+print('Save at:', args.output_path+'.mp4')

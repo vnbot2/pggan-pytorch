@@ -43,3 +43,5 @@ runs/
 
 # pycharm IDE files
 .idea/
+*.mp4
+*.avi
