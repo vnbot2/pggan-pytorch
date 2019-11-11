@@ -6,7 +6,7 @@ data
 *.json
 *.t7
 *.npy
-
+cache
 
 # zip files.
 *.dmg

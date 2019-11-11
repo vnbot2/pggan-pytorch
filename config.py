@@ -24,7 +24,6 @@ parser.add_argument('--max_resl', type=int, default=7)          # 10-->1024, 9--
 parser.add_argument('--trns_tick', type=int, default=200)       # transition tick
 parser.add_argument('--stab_tick', type=int, default=100)       # stabilization tick
 
-
 ## network structure.
 parser.add_argument('--flag_wn', type=bool, default=True)           # use of equalized-learning rate.
 parser.add_argument('--flag_bn', type=bool, default=False)          # use of batch-normalization. (not recommended)

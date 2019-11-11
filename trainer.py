@@ -157,8 +157,8 @@ class trainer:
                     self.G.grow_network(floor(self.resl))
                     self.D.grow_network(floor(self.resl))
                 self.renew_everything()
-                self.fadein['gen'] = dict(self.G.model.named_children())['fadein_block']
-                self.fadein['dis'] = dict(self.D.model.named_children())['fadein_block']
+                self.fadein['gen'] = dict(self.G.module.model.named_children())['fadein_block']
+                self.fadein['dis'] = dict(self.D.module.model.named_children())['fadein_block']
                 self.flag_flush_gen = True
                 self.flag_flush_dis = True
 
@@ -216,10 +216,11 @@ class trainer:
                                                 transforms.Scale(size=int(pow(2,floor(self.resl))), interpolation=0),      # 0: nearest
                                                 transforms.ToTensor(),
                                             ] )
-            x_low = x.clone().add(1).mul(0.5)
+            x_low = x.clone().add(1).mul(0.5).cpu()
             for i in range(x_low.size(0)):
                 x_low[i] = transform(x_low[i]).mul(2).add(-1)
-            x = torch.add(x.mul(alpha), x_low.mul(1-alpha)) # interpolated_x
+
+            x = torch.add(x.mul(alpha), x_low.mul(1-alpha).cuda()) # interpolated_x
 
         if self.use_cuda:
             return x.cuda()
@@ -265,7 +266,6 @@ class trainer:
                 self.D.zero_grad()
 
                 # update discriminator.
-                # import ipdb; ipdb.set_trace()
                 self.x.data = self.feed_interpolated_input(self.loader.get_batch())
                 if self.flag_add_noise:
                     self.x = self.add_noise(self.x)
