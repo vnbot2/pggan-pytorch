@@ -77,8 +77,8 @@ class MotoDataset(Dataset):
 class CustomDataloader:
     def __init__(self, config):
         self.root = config.train_data_root
-        self.batch_table = {4:1024, 8:512, 16:256, 32:128, 64:64, 128:64}
-        self.batchsize = int(self.batch_table[pow(2,2)])        # we start from 2^2=4
+        self.batch_table = {4:2048, 8:1024, 16:512, 32:256, 64:128, 128:64}
+        self.batchsize = int(self.batch_table[pow(2,2)])*torch.cuda.device_count()        # we start from 2^2=4
         self.imsize = int(pow(2,2))
         self.num_workers = 4
         

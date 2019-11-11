@@ -89,6 +89,7 @@ class trainer:
         step 3. (transition_tick) --> transition in discriminator.
         step 4. (stablize_tick) --> stabilize.
         '''
+
         if floor(self.resolution) != 2 :
             self.transition_tick = self.config.transition_tick
             self.stablize_tick = self.config.stablize_tick
@@ -114,8 +115,11 @@ class trainer:
                 self.phase = 'dstab'
             
         prev_kimgs = self.kimgs
-        self.kimgs = self.kimgs + self.batchsize
-        if (self.kimgs%self.TICK) < (prev_kimgs%self.TICK):
+        self.kimgs = self.kimgs + self.loader.batchsize
+        is_tick = False
+        # print(floor(self.kimgs/self.TICK) , floor(prev_kimgs/self.TICK))
+        if floor(self.kimgs/self.TICK) > floor(prev_kimgs/self.TICK):
+            is_tick = True
             self.globalTick = self.globalTick + 1
             # increase linearly every tick, and grow network structure.
             prev_resolution = floor(self.resolution)
@@ -166,7 +170,7 @@ class trainer:
                 self.phase = 'final'
                 self.resolution = self.max_resolution + (self.stablize_tick + self.transition_tick*2)*delta
 
-
+        return is_tick
             
     def renew_everything(self):
         # renew dataloader.
@@ -174,11 +178,11 @@ class trainer:
         self.loader.renew(min(floor(self.resolution), self.max_resolution))
         
         # define tensors
-        self.z = torch.FloatTensor(self.loader.batchsize, self.nz)
-        self.x = torch.FloatTensor(self.loader.batchsize, 3, self.loader.imsize, self.loader.imsize)
-        self.x_tilde = torch.FloatTensor(self.loader.batchsize, 3, self.loader.imsize, self.loader.imsize)
-        self.real_label = torch.FloatTensor(self.loader.batchsize).fill_(1)
-        self.fake_label = torch.FloatTensor(self.loader.batchsize).fill_(0)
+        self.z =            torch.FloatTensor(self.loader.batchsize, self.nz)
+        self.x =            torch.FloatTensor(self.loader.batchsize, 3, self.loader.imsize, self.loader.imsize)
+        self.x_tilde =      torch.FloatTensor(self.loader.batchsize, 3, self.loader.imsize, self.loader.imsize)
+        self.real_label =   torch.FloatTensor(self.loader.batchsize).fill_(1)
+        self.fake_label =   torch.FloatTensor(self.loader.batchsize).fill_(0)
         
         # enable cuda
         if self.use_cuda:
@@ -212,11 +216,12 @@ class trainer:
         if self.phase == 'gtrns' and floor(self.resolution)>2 and floor(self.resolution)<=self.max_resolution:
             alpha = self.complete['gen']/100.0
             transform = transforms.Compose( [   transforms.ToPILImage(),
-                                                transforms.Scale(size=int(pow(2,floor(self.resolution)-1)), interpolation=0),      # 0: nearest
-                                                transforms.Scale(size=int(pow(2,floor(self.resolution))), interpolation=0),      # 0: nearest
+                                                transforms.Resize(size=int(pow(2,floor(self.resolution)-1)), interpolation=0),      # 0: nearest
+                                                transforms.Resize(size=int(pow(2,floor(self.resolution))), interpolation=0),      # 0: nearest
                                                 transforms.ToTensor(),
                                             ] )
             x_low = x.clone().add(1).mul(0.5).cpu()
+            # Upsample all x_slow
             for i in range(x_low.size(0)):
                 x_low[i] = transform(x_low[i]).mul(2).add(-1)
 
@@ -251,9 +256,10 @@ class trainer:
         self.z_test.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
         
         for step in range(2, self.max_resolution+1+5):
-            n_samples = (self.transition_tick*2+self.stablize_tick*2)*self.TICK
-            pbar = tqdm(range(0,n_samples, self.loader.batchsize))
-            for iter in pbar:
+            n_samples = (self.transition_tick*2+self.stablize_tick*2)
+            pbar = tqdm(total=n_samples)
+            i_tick = 0
+            while i_tick < n_samples:
                 self.globalIter = self.globalIter+1
                 self.stack = self.stack + self.loader.batchsize
                 if self.stack > ceil(len(self.loader.dataset)):
@@ -261,7 +267,7 @@ class trainer:
                     self.stack = int(self.stack%(ceil(len(self.loader.dataset))))
 
                 # resolutionolution scheduler.
-                self.resolution_scheduler()
+                is_tick = self.resolution_scheduler()
                 
                 # zero gradients.
                 self.G.zero_grad()
@@ -271,14 +277,15 @@ class trainer:
                 self.x.data = self.feed_interpolated_input(self.loader.get_batch())
                 if self.flag_add_noise:
                     self.x = self.add_noise(self.x)
+
                 self.z.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
                 self.x_tilde = self.G(self.z)
                
                 self.fx = self.D(self.x)
                 self.fx_tilde = self.D(self.x_tilde.detach()).squeeze()
-                
-                loss_d = self.mse(self.fx.squeeze(), self.real_label) + \
-                                  self.mse(self.fx_tilde, self.fake_label)
+                loss_d_real = self.mse(self.fx.squeeze(), self.real_label)
+                loss_d_fake = self.mse(self.fx_tilde, self.fake_label)
+                loss_d = loss_d_real + loss_d_fake
                 loss_d.backward()
                 self.opt_d.step()
 
@@ -289,9 +296,15 @@ class trainer:
                 self.opt_g.step()
                 
                 # logging.
-                log_msg = ' [E:{0}][T:{1}][{2:6}/{3:6}]  errD: {4:.4f} | errG: {5:.4f} | [lr:{11:.5f}][cur:{6:.3f}][resolution:{7:4}][{8}][{9:.1f}%][{10:.1f}%]'.format(self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resolution, int(pow(2,floor(self.resolution))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
-                tqdm.write(log_msg)
-
+                
+                _is_tick = str('^') if is_tick else '-' 
+                log_msg =_is_tick + ' [E:{0}][T:{1}][{2:6}/{3:6}]  ErD: {4:.4f} | ErG: {5:.4f} | [lr:{11:.5f}][Res:{6:.3f}|{7:4}][{8}][{9:.1f}%][{10:.1f}%]'.format(
+                    self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resolution, 
+                    int(pow(2,floor(self.resolution))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
+                pbar.set_description(log_msg)
+                if is_tick:
+                    pbar.update()
+                    i_tick += 1
                 # save model.
                 self.snapshot('repo/model')
 
@@ -355,11 +368,7 @@ class trainer:
 
     def snapshot(self, path):
         os.makedirs(path, exist_ok=True)
-        # if not os.path.exists(path):
-        #     if os.name == 'nt':
-        #         os.system('mkdir {}'.format(path.replace('/', '\\')))
-        #     else:
-        #         os.system('mkdir -p {}'.format(path))
+
         # save every 100 tick if the network is in stab phase.
         ndis = 'dis_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)
         ngen = 'gen_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)

@@ -26,7 +26,6 @@ def f(image_path):
     height, width, layers = img.shape
     size = (width,height)
     put_text(img, (50, 50), str(sort_fn(image_path)))
-    # frame_array.append(img)
     return img
 
 frame_array = multi_thread(f, image_paths, verbose=True)

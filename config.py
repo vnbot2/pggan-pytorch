@@ -19,7 +19,7 @@ parser.add_argument('--nc', type=int, default=3)                # number of inpu
 parser.add_argument('--nz', type=int, default=512)              # input dimension of noise.
 parser.add_argument('--ngf', type=int, default=512)             # feature dimension of final layer of generator.
 parser.add_argument('--ndf', type=int, default=512)             # feature dimension of first layer of discriminator.
-parser.add_argument('--TICK', type=int, default=1000)           # 1 tick = 1000 images = (1000/batch_size) iter.
+parser.add_argument('--TICK', type=int, default=2048)           # 1 tick = 1000 images = (1000/batch_size) iter.
 parser.add_argument('--max_resolution', type=int, default=7)          # 10-->1024, 9-->512, 8-->256
 parser.add_argument('--transition_tick', type=int, default=200)       # transition tick
 parser.add_argument('--stablize_tick', type=int, default=100)       # stabilization tick
