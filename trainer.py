@@ -1,19 +1,6 @@
-import dataloader as DL
-from config import config
-import network as net
-from math import floor, ceil
-import os, sys
-import torch
-import torchvision.transforms as transforms
-from torch.autograd import Variable
-from torch.optim import Adam
-from tqdm import tqdm
-import tf_recorder as tensorboard
-import utils as utils
-import numpy as np
-# import tensorflow as tf
+from common import *
 
-class trainer:
+class Trainer:
     def __init__(self, config):
         self.config = config
         if torch.cuda.is_available():
@@ -48,32 +35,19 @@ class trainer:
         self.flag_add_drift = self.config.flag_add_drift
         
         # network and cirterion
-        self.G = net.Generator(config)
-        self.D = net.Discriminator(config)
+        self.G = nn.DataParallel(net.Generator(config).cuda())
+        self.D = nn.DataParallel(net.Discriminator(config).cuda())
         print ('Generator structure: ')
-        print(self.G.model)
+        print(self.G.module.model)
         print ('Discriminator structure: ')
-        print(self.D.model)
+        print(self.D.module.model)
         self.mse = torch.nn.MSELoss()
         n_gpu = torch.cuda.device_count()
         print('n_GPU:', n_gpu)
-        if self.use_cuda:
-            self.mse = self.mse.cuda()
-            torch.cuda.manual_seed(config.random_seed)
-            if n_gpu==1:
-                self.G = torch.nn.DataParallel(self.G).cuda(device=0)
-                self.D = torch.nn.DataParallel(self.D).cuda(device=0)
-            else:
-                gpus = []
-                for i  in range(n_gpu):
-                    gpus.append(i)
-                self.G = torch.nn.DataParallel(self.G, device_ids=gpus).cuda()
-                self.D = torch.nn.DataParallel(self.D, device_ids=gpus).cuda()  
-
-        
+        self.mse = self.mse.cuda()
+        torch.cuda.manual_seed(config.random_seed)
         # define tensors, ship model to cuda, and get dataloader.
         self.renew_everything()
-        
         # tensorboard
         self.use_tb = config.use_tb
         if self.use_tb:
@@ -152,14 +126,18 @@ class trainer:
 
             # grow network.
             if floor(self.resolution) != prev_resolution and floor(self.resolution)<self.max_resolution+1:
+                print('-'*10, 'Renew everything', '-'*10)
                 self.lr = self.lr * float(self.config.lr_decay)
-                if hasattr(self.G, 'module'):
-                    self.G.module.grow_network(floor(self.resolution))
-                    self.D.module.grow_network(floor(self.resolution))
 
-                else:
-                    self.G.grow_network(floor(self.resolution))
-                    self.D.grow_network(floor(self.resolution))
+                self.G.module.grow_network(floor(self.resolution))
+                self.D.module.grow_network(floor(self.resolution))
+                # some of the new added layers will be in cpu, 
+                # To CUda
+                self.G = nn.DataParallel(self.G.module.cuda())
+                self.D = nn.DataParallel(self.D.module.cuda())
+                
+                # for p in self.G.module.parameters(): print(p.device)
+                # import ipdb; ipdb.set_trace()
                 self.renew_everything()
                 self.fadein['gen'] = dict(self.G.module.model.named_children())['fadein_block']
                 self.fadein['dis'] = dict(self.D.module.model.named_children())['fadein_block']
@@ -185,26 +163,22 @@ class trainer:
         self.fake_label =   torch.FloatTensor(self.loader.batchsize).fill_(0)
         
         # enable cuda
-        if self.use_cuda:
-            self.z = self.z.cuda()
-            self.x = self.x.cuda()
-            self.x_tilde = self.x.cuda()
-            self.real_label = self.real_label.cuda()
-            self.fake_label = self.fake_label.cuda()
-            torch.cuda.manual_seed(config.random_seed)
+        # if self.use_cuda:
+        self.z = self.z.cuda()
+        self.x = self.x.cuda()
+        self.x_tilde = self.x.cuda()
+        self.real_label = self.real_label.cuda()
+        self.fake_label = self.fake_label.cuda()
+        torch.cuda.manual_seed(config.random_seed)
 
         # wrapping autograd Variable.
-        self.x = Variable(self.x)
-        self.x_tilde = Variable(self.x_tilde)
-        self.z = Variable(self.z)
-        self.real_label = Variable(self.real_label)
-        self.fake_label = Variable(self.fake_label)
+        # self.x = Variable(self.x)
+        # self.x_tilde = Variable(self.x_tilde)
+        # self.z = Variable(self.z)
+        # self.real_label = Variable(self.real_label)
+        # self.fake_label = Variable(self.fake_label)
         
-        # ship new model to cuda.
-        if self.use_cuda:
-            self.G = self.G.cuda()
-            self.D = self.D.cuda()
-        
+
         # optimizer
         betas = (self.config.beta1, self.config.beta2)
         if self.optimizer == 'adam':
@@ -256,10 +230,11 @@ class trainer:
         self.z_test.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
         
         for step in range(2, self.max_resolution+1+5):
-            n_samples = (self.transition_tick*2+self.stablize_tick*2)
-            pbar = tqdm(total=n_samples)
+            
+            total=len(self.loader) // self.loader.batchsize
+            pbar = tqdm(total=total)
             i_tick = 0
-            while i_tick < n_samples:
+            while i_tick < total:
                 self.globalIter = self.globalIter+1
                 self.stack = self.stack + self.loader.batchsize
                 if self.stack > ceil(len(self.loader.dataset)):
@@ -277,9 +252,12 @@ class trainer:
                 self.x.data = self.feed_interpolated_input(self.loader.get_batch())
                 if self.flag_add_noise:
                     self.x = self.add_noise(self.x)
-
-                self.z.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
-                self.x_tilde = self.G(self.z)
+                # import ipdb; ipdb.set_trace()
+                try:
+                    self.z.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
+                    self.x_tilde = self.G(self.z)
+                except:
+                    import ipdb; ipdb.set_trace()
                
                 self.fx = self.D(self.x)
                 self.fx_tilde = self.D(self.x_tilde.detach()).squeeze()
@@ -388,7 +366,7 @@ if __name__ == '__main__':
         print('  {}: {}'.format(k, v))
     print('-------------------------------------------------')
     torch.backends.cudnn.benchmark = True           # boost speed.
-    trainer = trainer(config)
+    trainer = Trainer(config)
     trainer.train()
 
 
