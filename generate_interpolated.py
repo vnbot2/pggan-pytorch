@@ -21,8 +21,8 @@ if use_cuda:
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-for resl in range(3, config.max_resl+1):
-    test_model.module.grow_network(resl)
+for resolution in range(3, config.max_resolution+1):
+    test_model.module.grow_network(resolution)
     test_model.module.flush_network()
 print(test_model)
 
@@ -54,7 +54,7 @@ for i in range(1, n_intp+1):
     z_intp.data = z1.mul_(alpha) + z2.mul_(1.0-alpha)
     fake_im = test_model.module(z_intp)
     fname = os.path.join(name, '_intp{}.jpg'.format(i))
-    utils.save_image_single(fake_im.data, fname, imsize=pow(2,config.max_resl))
+    utils.save_image_single(fake_im.data, fname, imsize=pow(2,config.max_resolution))
     print('saved {}-th interpolated image ...'.format(i))
 
 

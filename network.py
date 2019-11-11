@@ -87,16 +87,16 @@ class Generator(nn.Module):
         layers = deconv(layers, ndim, ndim, 3, 1, 1, self.flag_leaky, self.flag_bn, self.flag_wn, self.flag_pixelwise)
         return  nn.Sequential(*layers), ndim
 
-    def intermediate_block(self, resl):
+    def intermediate_block(self, resolution):
         halving = False
-        layer_name = 'intermediate_{}x{}_{}x{}'.format(int(pow(2,resl-1)), int(pow(2,resl-1)), int(pow(2, resl)), int(pow(2, resl)))
+        layer_name = 'intermediate_{}x{}_{}x{}'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2, resolution)), int(pow(2, resolution)))
         ndim = self.ngf
-        if resl==3 or resl==4 or resl==5:
+        if resolution==3 or resolution==4 or resolution==5:
             halving = False
             ndim = self.ngf
-        elif resl==6 or resl==7 or resl==8 or resl==9 or resl==10:
+        elif resolution==6 or resolution==7 or resolution==8 or resolution==9 or resolution==10:
             halving = True
-            for i in range(int(resl)-5):
+            for i in range(int(resolution)-5):
                 ndim = ndim/2
         ndim = int(ndim)
         layers = []
@@ -123,7 +123,7 @@ class Generator(nn.Module):
         self.module_names = get_module_names(model)
         return model
     
-    def grow_network(self, resl):
+    def grow_network(self, resolution):
         # we make new network since pytorch does not support remove_module()
         new_model = nn.Sequential()
         names = get_module_names(self.model)
@@ -132,17 +132,17 @@ class Generator(nn.Module):
                 new_model.add_module(name, module)                      # make new structure and,
                 new_model[-1].load_state_dict(module.state_dict())      # copy pretrained weights
             
-        if resl >= 3 and resl <= 9:
-            print('growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resl-1)), int(pow(2,resl-1)), int(pow(2,resl)), int(pow(2,resl))))
-            low_resl_to_rgb = deepcopy_module(self.model, 'to_rgb_block')
+        if resolution >= 3 and resolution <= 9:
+            print('growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
+            low_resolution_to_rgb = deepcopy_module(self.model, 'to_rgb_block')
             prev_block = nn.Sequential()
-            prev_block.add_module('low_resl_upsample', nn.Upsample(scale_factor=2, mode='nearest'))
-            prev_block.add_module('low_resl_to_rgb', low_resl_to_rgb)
+            prev_block.add_module('low_resolution_upsample', nn.Upsample(scale_factor=2, mode='nearest'))
+            prev_block.add_module('low_resolution_to_rgb', low_resolution_to_rgb)
 
-            inter_block, ndim, self.layer_name = self.intermediate_block(resl)
+            inter_block, ndim, self.layer_name = self.intermediate_block(resolution)
             next_block = nn.Sequential()
-            next_block.add_module('high_resl_block', inter_block)
-            next_block.add_module('high_resl_to_rgb', self.to_rgb_block(ndim))
+            next_block.add_module('high_resolution_block', inter_block)
+            next_block.add_module('high_resolution_to_rgb', self.to_rgb_block(ndim))
 
             new_model.add_module('concat_block', ConcatTable(prev_block, next_block))
             new_model.add_module('fadein_block', fadein_layer(self.config))
@@ -154,8 +154,8 @@ class Generator(nn.Module):
         try:
             print('flushing network... It may take few seconds...')
             # make deep copy and paste.
-            high_resl_block = deepcopy_module(self.model.concat_block.layer2, 'high_resl_block')
-            high_resl_to_rgb = deepcopy_module(self.model.concat_block.layer2, 'high_resl_to_rgb')
+            high_resolution_block = deepcopy_module(self.model.concat_block.layer2, 'high_resolution_block')
+            high_resolution_to_rgb = deepcopy_module(self.model.concat_block.layer2, 'high_resolution_to_rgb')
            
             new_model = nn.Sequential()
             for name, module in self.model.named_children():
@@ -164,8 +164,8 @@ class Generator(nn.Module):
                     new_model[-1].load_state_dict(module.state_dict())      # copy pretrained weights
 
             # now, add the high resolution block.
-            new_model.add_module(self.layer_name, high_resl_block)
-            new_model.add_module('to_rgb_block', high_resl_to_rgb)
+            new_model.add_module(self.layer_name, high_resolution_block)
+            new_model.add_module('to_rgb_block', high_resolution_to_rgb)
             self.model = new_model
             self.module_names = get_module_names(self.model)
         except:
@@ -208,16 +208,16 @@ class Discriminator(nn.Module):
         layers = linear(layers, ndim, 1, sig=self.flag_sigmoid, wn=self.flag_wn)
         return  nn.Sequential(*layers), ndim
     
-    def intermediate_block(self, resl):
+    def intermediate_block(self, resolution):
         halving = False
-        layer_name = 'intermediate_{}x{}_{}x{}'.format(int(pow(2,resl)), int(pow(2,resl)), int(pow(2, resl-1)), int(pow(2, resl-1)))
+        layer_name = 'intermediate_{}x{}_{}x{}'.format(int(pow(2,resolution)), int(pow(2,resolution)), int(pow(2, resolution-1)), int(pow(2, resolution-1)))
         ndim = self.ndf
-        if resl==3 or resl==4 or resl==5:
+        if resolution==3 or resolution==4 or resolution==5:
             halving = False
             ndim = self.ndf
-        elif resl==6 or resl==7 or resl==8 or resl==9 or resl==10:
+        elif resolution==6 or resolution==7 or resolution==8 or resolution==9 or resolution==10:
             halving = True
-            for i in range(int(resl)-5):
+            for i in range(int(resolution)-5):
                 ndim = ndim/2
         ndim = int(ndim)
         layers = []
@@ -245,19 +245,19 @@ class Discriminator(nn.Module):
         return model
     
 
-    def grow_network(self, resl):
+    def grow_network(self, resolution):
             
-        if resl >= 3 and resl <= 9:
-            print('growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resl-1)), int(pow(2,resl-1)), int(pow(2,resl)), int(pow(2,resl))))
-            low_resl_from_rgb = deepcopy_module(self.model, 'from_rgb_block')
+        if resolution >= 3 and resolution <= 9:
+            print('growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
+            low_resolution_from_rgb = deepcopy_module(self.model, 'from_rgb_block')
             prev_block = nn.Sequential()
-            prev_block.add_module('low_resl_downsample', nn.AvgPool2d(kernel_size=2))
-            prev_block.add_module('low_resl_from_rgb', low_resl_from_rgb)
+            prev_block.add_module('low_resolution_downsample', nn.AvgPool2d(kernel_size=2))
+            prev_block.add_module('low_resolution_from_rgb', low_resolution_from_rgb)
 
-            inter_block, ndim, self.layer_name = self.intermediate_block(resl)
+            inter_block, ndim, self.layer_name = self.intermediate_block(resolution)
             next_block = nn.Sequential()
-            next_block.add_module('high_resl_from_rgb', self.from_rgb_block(ndim))
-            next_block.add_module('high_resl_block', inter_block)
+            next_block.add_module('high_resolution_from_rgb', self.from_rgb_block(ndim))
+            next_block.add_module('high_resolution_block', inter_block)
 
             new_model = nn.Sequential()
             new_model.add_module('concat_block', ConcatTable(prev_block, next_block))
@@ -277,13 +277,13 @@ class Discriminator(nn.Module):
         try:
             print('flushing network... It may take few seconds...')
             # make deep copy and paste.
-            high_resl_block = deepcopy_module(self.model.concat_block.layer2, 'high_resl_block')
-            high_resl_from_rgb = deepcopy_module(self.model.concat_block.layer2, 'high_resl_from_rgb')
+            high_resolution_block = deepcopy_module(self.model.concat_block.layer2, 'high_resolution_block')
+            high_resolution_from_rgb = deepcopy_module(self.model.concat_block.layer2, 'high_resolution_from_rgb')
            
             # add the high resolution block.
             new_model = nn.Sequential()
-            new_model.add_module('from_rgb_block', high_resl_from_rgb)
-            new_model.add_module(self.layer_name, high_resl_block)
+            new_model.add_module('from_rgb_block', high_resolution_from_rgb)
+            new_model.add_module(self.layer_name, high_resolution_block)
             
             # add rest.
             for name, module in self.model.named_children():

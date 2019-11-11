@@ -77,16 +77,16 @@ class MotoDataset(Dataset):
 class CustomDataloader:
     def __init__(self, config):
         self.root = config.train_data_root
-        self.batch_table = {4:32, 8:32, 16:32, 32:16, 64:16, 128:16, 256:12, 512:3, 1024:1} # change this according to available gpu memory.
+        self.batch_table = {4:512, 8:, 16:256, 32:128, 64:64, 128:64}
         self.batchsize = int(self.batch_table[pow(2,2)])        # we start from 2^2=4
         self.imsize = int(pow(2,2))
         self.num_workers = 4
         
-    def renew(self, resl):
+    def renew(self, resolution):
         print('[*] Renew dataloader configuration, load data from {}.'.format(self.root))
         
-        self.batchsize = int(self.batch_table[pow(2,resl)])
-        self.imsize = int(pow(2,resl))
+        self.batchsize = int(self.batch_table[pow(2,resolution)])
+        self.imsize = int(pow(2,resolution))
         self.dataset = MotoDataset(self.root, size=(self.imsize,self.imsize))
         # self.dataset = ImageFolder(
         #             root=self.root,

@@ -26,13 +26,13 @@ class trainer:
         self.nz = config.nz
         self.optimizer = config.optimizer
 
-        self.resl = 2           # we start from 2^2 = 4
+        self.resolution = 2           # we start from 2^2 = 4
         self.lr = config.lr
         self.eps_drift = config.eps_drift
         self.smoothing = config.smoothing
-        self.max_resl = config.max_resl
-        self.trns_tick = config.trns_tick
-        self.stab_tick = config.stab_tick
+        self.max_resolution = config.max_resolution
+        self.transition_tick = config.transition_tick
+        self.stablize_tick = config.stablize_tick
         self.TICK = config.TICK
         self.globalIter = 0
         self.globalTick = 0
@@ -80,37 +80,37 @@ class trainer:
             self.tb = tensorboard.tf_recorder()
         
 
-    def resl_scheduler(self):
+    def resolution_scheduler(self):
         '''
-        this function will schedule image resolution(self.resl) progressively.
-        it should be called every iteration to ensure resl value is updated properly.
-        step 1. (trns_tick) --> transition in generator.
-        step 2. (stab_tick) --> stabilize.
-        step 3. (trns_tick) --> transition in discriminator.
-        step 4. (stab_tick) --> stabilize.
+        this function will schedule image resolution(self.resolution) progressively.
+        it should be called every iteration to ensure resolution value is updated properly.
+        step 1. (transition_tick) --> transition in generator.
+        step 2. (stablize_tick) --> stabilize.
+        step 3. (transition_tick) --> transition in discriminator.
+        step 4. (stablize_tick) --> stabilize.
         '''
-        if floor(self.resl) != 2 :
-            self.trns_tick = self.config.trns_tick
-            self.stab_tick = self.config.stab_tick
+        if floor(self.resolution) != 2 :
+            self.transition_tick = self.config.transition_tick
+            self.stablize_tick = self.config.stablize_tick
         
         self.batchsize = self.loader.batchsize
-        delta = 1.0/(2*self.trns_tick+2*self.stab_tick)
-        d_alpha = 1.0*self.batchsize/self.trns_tick/self.TICK
+        delta = 1.0/(2*self.transition_tick+2*self.stablize_tick)
+        d_alpha = 1.0*self.batchsize/self.transition_tick/self.TICK
 
         # update alpha if fade-in layer exist.
         if self.fadein['gen'] is not None:
-            if self.resl%1.0 < (self.trns_tick)*delta:
+            if self.resolution%1.0 < (self.transition_tick)*delta:
                 self.fadein['gen'].update_alpha(d_alpha)
                 self.complete['gen'] = self.fadein['gen'].alpha*100
                 self.phase = 'gtrns'
-            elif self.resl%1.0 >= (self.trns_tick)*delta and self.resl%1.0 < (self.trns_tick+self.stab_tick)*delta:
+            elif self.resolution%1.0 >= (self.transition_tick)*delta and self.resolution%1.0 < (self.transition_tick+self.stablize_tick)*delta:
                 self.phase = 'gstab'
         if self.fadein['dis'] is not None:
-            if self.resl%1.0 >= (self.trns_tick+self.stab_tick)*delta and self.resl%1.0 < (self.stab_tick + self.trns_tick*2)*delta:
+            if self.resolution%1.0 >= (self.transition_tick+self.stablize_tick)*delta and self.resolution%1.0 < (self.stablize_tick + self.transition_tick*2)*delta:
                 self.fadein['dis'].update_alpha(d_alpha)
                 self.complete['dis'] = self.fadein['dis'].alpha*100
                 self.phase = 'dtrns'
-            elif self.resl%1.0 >= (self.stab_tick + self.trns_tick*2)*delta and self.phase!='final':
+            elif self.resolution%1.0 >= (self.stablize_tick + self.transition_tick*2)*delta and self.phase!='final':
                 self.phase = 'dstab'
             
         prev_kimgs = self.kimgs
@@ -118,12 +118,12 @@ class trainer:
         if (self.kimgs%self.TICK) < (prev_kimgs%self.TICK):
             self.globalTick = self.globalTick + 1
             # increase linearly every tick, and grow network structure.
-            prev_resl = floor(self.resl)
-            self.resl = self.resl + delta
-            self.resl = max(2, min(10.5, self.resl))        # clamping, range: 4 ~ 1024
+            prev_resolution = floor(self.resolution)
+            self.resolution = self.resolution + delta
+            self.resolution = max(2, min(10.5, self.resolution))        # clamping, range: 4 ~ 1024
 
             # flush network.
-            if self.flag_flush_gen and self.resl%1.0 >= (self.trns_tick+self.stab_tick)*delta and prev_resl!=2:
+            if self.flag_flush_gen and self.resolution%1.0 >= (self.transition_tick+self.stablize_tick)*delta and prev_resolution!=2:
                 if self.fadein['gen'] is not None:
                     self.fadein['gen'].update_alpha(d_alpha)
                     self.complete['gen'] = self.fadein['gen'].alpha*100
@@ -134,7 +134,7 @@ class trainer:
                 self.fadein['gen'] = None
                 self.complete['gen'] = 0.0
                 self.phase = 'dtrns'
-            elif self.flag_flush_dis and floor(self.resl) != prev_resl and prev_resl!=2:
+            elif self.flag_flush_dis and floor(self.resolution) != prev_resolution and prev_resolution!=2:
                 if self.fadein['dis'] is not None:
                     self.fadein['dis'].update_alpha(d_alpha)
                     self.complete['dis'] = self.fadein['dis'].alpha*100
@@ -143,35 +143,35 @@ class trainer:
                 print(self.D.module.model)
                 self.fadein['dis'] = None
                 self.complete['dis'] = 0.0
-                if floor(self.resl) < self.max_resl and self.phase != 'final':
+                if floor(self.resolution) < self.max_resolution and self.phase != 'final':
                     self.phase = 'gtrns'
 
             # grow network.
-            if floor(self.resl) != prev_resl and floor(self.resl)<self.max_resl+1:
+            if floor(self.resolution) != prev_resolution and floor(self.resolution)<self.max_resolution+1:
                 self.lr = self.lr * float(self.config.lr_decay)
                 if hasattr(self.G, 'module'):
-                    self.G.module.grow_network(floor(self.resl))
-                    self.D.module.grow_network(floor(self.resl))
+                    self.G.module.grow_network(floor(self.resolution))
+                    self.D.module.grow_network(floor(self.resolution))
 
                 else:
-                    self.G.grow_network(floor(self.resl))
-                    self.D.grow_network(floor(self.resl))
+                    self.G.grow_network(floor(self.resolution))
+                    self.D.grow_network(floor(self.resolution))
                 self.renew_everything()
                 self.fadein['gen'] = dict(self.G.module.model.named_children())['fadein_block']
                 self.fadein['dis'] = dict(self.D.module.model.named_children())['fadein_block']
                 self.flag_flush_gen = True
                 self.flag_flush_dis = True
 
-            if floor(self.resl) >= self.max_resl and self.resl%1.0 >= (self.stab_tick + self.trns_tick*2)*delta:
+            if floor(self.resolution) >= self.max_resolution and self.resolution%1.0 >= (self.stablize_tick + self.transition_tick*2)*delta:
                 self.phase = 'final'
-                self.resl = self.max_resl + (self.stab_tick + self.trns_tick*2)*delta
+                self.resolution = self.max_resolution + (self.stablize_tick + self.transition_tick*2)*delta
 
 
             
     def renew_everything(self):
         # renew dataloader.
         self.loader = DL.CustomDataloader(config)
-        self.loader.renew(min(floor(self.resl), self.max_resl))
+        self.loader.renew(min(floor(self.resolution), self.max_resolution))
         
         # define tensors
         self.z = torch.FloatTensor(self.loader.batchsize, self.nz)
@@ -209,11 +209,11 @@ class trainer:
         
 
     def feed_interpolated_input(self, x):
-        if self.phase == 'gtrns' and floor(self.resl)>2 and floor(self.resl)<=self.max_resl:
+        if self.phase == 'gtrns' and floor(self.resolution)>2 and floor(self.resolution)<=self.max_resolution:
             alpha = self.complete['gen']/100.0
             transform = transforms.Compose( [   transforms.ToPILImage(),
-                                                transforms.Scale(size=int(pow(2,floor(self.resl)-1)), interpolation=0),      # 0: nearest
-                                                transforms.Scale(size=int(pow(2,floor(self.resl))), interpolation=0),      # 0: nearest
+                                                transforms.Scale(size=int(pow(2,floor(self.resolution)-1)), interpolation=0),      # 0: nearest
+                                                transforms.Scale(size=int(pow(2,floor(self.resolution))), interpolation=0),      # 0: nearest
                                                 transforms.ToTensor(),
                                             ] )
             x_low = x.clone().add(1).mul(0.5).cpu()
@@ -250,16 +250,16 @@ class trainer:
         # self.z_test = torch.from_numpy(self.z_test)
         self.z_test.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
         
-        for step in range(2, self.max_resl+1+5):
-            for iter in tqdm(range(0,(self.trns_tick*2+self.stab_tick*2)*self.TICK, self.loader.batchsize)):
+        for step in range(2, self.max_resolution+1+5):
+            for iter in tqdm(range(0,(self.transition_tick*2+self.stablize_tick*2)*self.TICK, self.loader.batchsize)):
                 self.globalIter = self.globalIter+1
                 self.stack = self.stack + self.loader.batchsize
                 if self.stack > ceil(len(self.loader.dataset)):
                     self.epoch = self.epoch + 1
                     self.stack = int(self.stack%(ceil(len(self.loader.dataset))))
 
-                # reslolution scheduler.
-                self.resl_scheduler()
+                # resolutionolution scheduler.
+                self.resolution_scheduler()
                 
                 # zero gradients.
                 self.G.zero_grad()
@@ -287,7 +287,7 @@ class trainer:
                 self.opt_g.step()
                 
                 # logging.
-                log_msg = ' [E:{0}][T:{1}][{2:6}/{3:6}]  errD: {4:.4f} | errG: {5:.4f} | [lr:{11:.5f}][cur:{6:.3f}][resl:{7:4}][{8}][{9:.1f}%][{10:.1f}%]'.format(self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resl, int(pow(2,floor(self.resl))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
+                log_msg = ' [E:{0}][T:{1}][{2:6}/{3:6}]  errD: {4:.4f} | errG: {5:.4f} | [lr:{11:.5f}][cur:{6:.3f}][resolution:{7:4}][{8}][{9:.1f}%][{10:.1f}%]'.format(self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resolution, int(pow(2,floor(self.resolution))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
                 tqdm.write(log_msg)
 
                 # save model.
@@ -299,9 +299,9 @@ class trainer:
                         x_test = self.G(self.z_test)
                     os.makedirs('repo/save/grid', exist_ok=True)
                     utils.save_image_grid(x_test.data, 'repo/save/grid/{}_{}_G{}_D{}.jpg'.format(int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
-                    os.makedirs('repo/save/resl_{}'.format(int(floor(self.resl))), exist_ok=True)
-                    utils.save_image_single(x_test.data, 'repo/save/resl_{}/{}_{}_G{}_D{}.jpg'.format(
-                        int(floor(self.resl)),int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
+                    os.makedirs('repo/save/resolution_{}'.format(int(floor(self.resolution))), exist_ok=True)
+                    utils.save_image_single(x_test.data, 'repo/save/resolution_{}/{}_{}_G{}_D{}.jpg'.format(
+                        int(floor(self.resolution)),int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
 
                 # tensorboard visualization.
                 if self.use_tb:
@@ -310,7 +310,7 @@ class trainer:
                     self.tb.add_scalar('data/loss_g', loss_g.item(), self.globalIter)
                     self.tb.add_scalar('data/loss_d', loss_d.item(), self.globalIter)
                     self.tb.add_scalar('tick/lr', self.lr, self.globalIter)
-                    self.tb.add_scalar('tick/cur_resl', int(pow(2,floor(self.resl))), self.globalIter)
+                    self.tb.add_scalar('tick/cur_resolution', int(pow(2,floor(self.resolution))), self.globalIter)
                     '''IMAGE GRID
                     self.tb.add_image_grid('grid/x_test', 4, utils.adjust_dyn_range(x_test.data.float(), [-1,1], [0,1]), self.globalIter)
                     self.tb.add_image_grid('grid/x_tilde', 4, utils.adjust_dyn_range(self.x_tilde.data.float(), [-1,1], [0,1]), self.globalIter)
@@ -320,14 +320,14 @@ class trainer:
     def get_state(self, target):
         if target == 'gen':
             state = {
-                'resl' : self.resl,
+                'resolution' : self.resolution,
                 'state_dict' : self.G.module.state_dict(),
                 'optimizer' : self.opt_g.state_dict(),
             }
             return state
         elif target == 'dis':
             state = {
-                'resl' : self.resl,
+                'resolution' : self.resolution,
                 'state_dict' : self.D.module.state_dict(),
                 'optimizer' : self.opt_d.state_dict(),
             }
@@ -337,14 +337,14 @@ class trainer:
     def get_state(self, target):
         if target == 'gen':
             state = {
-                'resl' : self.resl,
+                'resolution' : self.resolution,
                 'state_dict' : self.G.module.state_dict(),
                 'optimizer' : self.opt_g.state_dict(),
             }
             return state
         elif target == 'dis':
             state = {
-                'resl' : self.resl,
+                'resolution' : self.resolution,
                 'state_dict' : self.D.module.state_dict(),
                 'optimizer' : self.opt_d.state_dict(),
             }
@@ -359,8 +359,8 @@ class trainer:
         #     else:
         #         os.system('mkdir -p {}'.format(path))
         # save every 100 tick if the network is in stab phase.
-        ndis = 'dis_R{}_T{}.pth.tar'.format(int(floor(self.resl)), self.globalTick)
-        ngen = 'gen_R{}_T{}.pth.tar'.format(int(floor(self.resl)), self.globalTick)
+        ndis = 'dis_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)
+        ngen = 'gen_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)
         if self.globalTick%50==0:
             if self.phase == 'gstab' or self.phase =='dstab' or self.phase == 'final':
                 save_path = os.path.join(path, ndis)
