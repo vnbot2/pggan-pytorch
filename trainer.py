@@ -252,12 +252,8 @@ class Trainer:
                 self.x.data = self.feed_interpolated_input(self.loader.get_batch())
                 if self.flag_add_noise:
                     self.x = self.add_noise(self.x)
-                # import ipdb; ipdb.set_trace()
-                try:
-                    self.z.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
-                    self.x_tilde = self.G(self.z)
-                except:
-                    import ipdb; ipdb.set_trace()
+                self.z.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
+                self.x_tilde = self.G(self.z)
                
                 self.fx = self.D(self.x)
                 self.fx_tilde = self.D(self.x_tilde.detach()).squeeze()
