@@ -251,7 +251,9 @@ class trainer:
         self.z_test.data.resize_(self.loader.batchsize, self.nz).normal_(0.0, 1.0)
         
         for step in range(2, self.max_resolution+1+5):
-            for iter in tqdm(range(0,(self.transition_tick*2+self.stablize_tick*2)*self.TICK, self.loader.batchsize)):
+            n_samples = (self.transition_tick*2+self.stablize_tick*2)*self.TICK
+            pbar = tqdm(range(0,n_samples, self.loader.batchsize))
+            for iter in pbar:
                 self.globalIter = self.globalIter+1
                 self.stack = self.stack + self.loader.batchsize
                 if self.stack > ceil(len(self.loader.dataset)):

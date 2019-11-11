@@ -1,4 +1,5 @@
 # ignore this files when commit.
+*.avi
 data
 # data files.
 *.h5
