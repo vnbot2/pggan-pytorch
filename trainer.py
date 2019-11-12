@@ -282,16 +282,16 @@ class trainer:
             loss_g = self.mse(fx_tilde.squeeze(), self.real_label.detach())
             loss_g.backward()
             self.opt_g.step()
-            
-            # logging.
-            log_msg = sched_results['ticked'] + ' [E:{0}][T:{1}]  errD: {4:.4f} | errG: {5:.4f} | [lr:{11:.5f}][cur:{6:.3f}][resolution:{7:4}][{8}]'.format(self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resolution, int(pow(2,floor(self.resolution))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
-            if hasattr(self, 'fadein') and self.fadein['dis'] is not None:
-                log_msg += '|D-Alpha:{:0.2f}'.format(self.fadein['dis'].alpha)
-                
-            if hasattr(self, 'fadein') and self.fadein['gen'] is not None:
-                log_msg += '|G-Alpha:{:0.2f}'.format(self.fadein['gen'].alpha)
-
-            print(log_msg)
+            if self.globalIter % self.config.freq_print == 0:        
+                # logging.
+                log_msg = sched_results['ticked'] + ' [E:{0}][T:{1}]  errD: {4:.4f} | errG: {5:.4f} | [lr:{11:.5f}][cur:{6:.3f}][resolution:{7:4}][{8}]'.format(self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resolution, int(pow(2,floor(self.resolution))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
+                if hasattr(self, 'fadein') and self.fadein['dis'] is not None:
+                    log_msg += '|D-Alpha:{:0.2f}'.format(self.fadein['dis'].alpha)
+                    
+                if hasattr(self, 'fadein') and self.fadein['gen'] is not None:
+                    log_msg += '|G-Alpha:{:0.2f}'.format(self.fadein['gen'].alpha)
+        
+                print(log_msg)
             if self.phase == 'final':
                 final_step+=1
                 if final_step > self.config.final_steps:
@@ -325,21 +325,21 @@ class trainer:
                 self.tb.add_image_grid('grid/x_intp', 4, utils.adjust_dyn_range(self.x.data.float(), [-1,1], [0,1]), self.globalIter)
                 '''
 
-    def get_state(self, target):
-        if target == 'gen':
-            state = {
-                'resolution' : self.resolution,
-                'state_dict' : self.G.module.state_dict(),
-                'optimizer' : self.opt_g.state_dict(),
-            }
-            return state
-        elif target == 'dis':
-            state = {
-                'resolution' : self.resolution,
-                'state_dict' : self.D.module.state_dict(),
-                'optimizer' : self.opt_d.state_dict(),
-            }
-            return state
+    # def get_state(self, target):
+    #     if target == 'gen':
+    #         state = {
+    #             'resolution' : self.resolution,
+    #             'state_dict' : self.G.module.state_dict(),
+    #             'optimizer' : self.opt_g.state_dict(),
+    #         }
+    #         return state
+    #     elif target == 'dis':
+    #         state = {
+    #             'resolution' : self.resolution,
+    #             'state_dict' : self.D.module.state_dict(),
+    #             'optimizer' : self.opt_d.state_dict(),
+    #         }
+    #         return state
 
 
     def get_state(self, target):
@@ -357,7 +357,18 @@ class trainer:
                 'optimizer' : self.opt_d.state_dict(),
             }
             return state
+        elif target == 'trainer':
+            rt = {}
+            def condition(x):
+                for t in [int, float, str]:
+                    if isinstance(x, t):
+                        return True
+                return False
 
+            for k, v in self.__dict__.items():
+                if condition(v):
+                    rt[k] = v
+            return rt
 
     def snapshot(self, path):
         if not os.path.exists(path):
@@ -366,16 +377,19 @@ class trainer:
             else:
                 os.system('mkdir -p {}'.format(path))
         # save every 100 tick if the network is in stablize phase.
-        ndis = 'dis_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)
-        ngen = 'gen_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)
-        if self.globalTick%50==0:
+        # ndis = 'dis_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)
+        # ngen = 'gen_R{}_T{}.pth.tar'.format(int(floor(self.resolution)), self.globalTick)
+        out_name = f'r{floor(self.resolution)}_{self.globalTick}.pth'
+        if self.globalTick%self.config.TICK==0:
             if self.phase == 'gstablize' or self.phase =='dstablize' or self.phase == 'final':
-                save_path = os.path.join(path, ndis)
-                if not os.path.exists(save_path):
-                    torch.save(self.get_state('dis'), save_path)
-                    save_path = os.path.join(path, ngen)
-                    torch.save(self.get_state('gen'), save_path)
-                    print('[snapshot] model saved @ {}'.format(path))
+                save_path = os.path.join(path, out_name)
+                # if not os.path.exists(save_path):
+                dis_state = self.get_state('dis')
+                gen_state = self.get_state('gen')
+                trainer_state = self.get_state('trainer')
+                state = {'dis_state':dis_state, 'gen_state':gen_state, 'trainer_state':trainer_state}
+                torch.save(state, save_path)
+                print('[snapshot] model saved @ {}'.format(path))
 
 if __name__ == '__main__':
     ## perform training.
