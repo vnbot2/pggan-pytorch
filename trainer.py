@@ -56,19 +56,6 @@ class trainer:
         print ('Discriminator structure: ')
         print(self.D.module.model)
         self.mse = torch.nn.MSELoss()
-        # if self.use_cuda:
-        #     self.mse = self.mse.cuda()
-        #     torch.cuda.manual_seed(config.random_seed)
-        #     if torch.cuda.device_count()==1:
-        #         self.G = torch.nn.DataParallel(self.G).cuda(device=0)
-        #         self.D = torch.nn.DataParallel(self.D).cuda(device=0)
-        #     else:
-        #         gpus = []
-        #         for i  in range(config.n_gpu):
-        #             gpus.append(i)
-
-        
-        # define tensors, ship model to cuda, and get dataloader.
         self.renew_everything()
         
         # tensorboard
@@ -76,6 +63,8 @@ class trainer:
         if self.use_tb:
             self.tb = tensorboard.tf_recorder()
         
+        if config.pretrained is not None:
+            self.load_pretrained(config.pretrained)
 
     def resolution_scheduler(self):
         '''
@@ -205,14 +194,7 @@ class trainer:
     def feed_interpolated_input(self, x):
         if self.phase == 'gtransition' and floor(self.resolution)>2 and floor(self.resolution)<=self.max_resolution:
             alpha = self.complete['gen']/100.0
-            # transform = transforms.Compose( [   transforms.ToPILImage(),
-            #                                     transforms.Scale(size=int(pow(2,floor(self.resolution)-1)), interpolation=0),      # 0: nearest
-            #                                     transforms.Scale(size=int(pow(2,floor(self.resolution))), interpolation=0),      # 0: nearest
-            #                                     transforms.ToTensor(),
-            #                                 ] )
-            # x_low = x.clone().add(1).mul(0.5)
-            # for i in range(x_low.size(0)):
-            #     x_low[i] = transform(x_low[i]).mul(2).add(-1)
+
             x_low = x.clone()
             x_low = nn.functional.interpolate(x_low, size=int(pow(2,floor(self.resolution)-1)), mode='nearest')
             x_low = nn.functional.interpolate(x_low, size=int(pow(2,floor(self.resolution))), mode='nearest')
@@ -310,7 +292,7 @@ class trainer:
                 utils.save_image_grid(x_test.data, 'repo/save/grid/{}_{}_G{}_D{}.jpg'.format(int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
                 utils.mkdir('repo/save/resolution_{}'.format(int(floor(self.resolution))))
                 utils.save_image_single(x_test.data, 'repo/save/resolution_{}/{}_{}_G{}_D{}.jpg'.format(int(floor(self.resolution)),int(self.globalIter/self.config.save_img_every), self.phase, self.complete['gen'], self.complete['dis']))
-
+                # import ipdb; ipdb.set_trace()
             # tensorboard visualization.
             if self.use_tb:
                 with torch.no_grad():
@@ -370,6 +352,22 @@ class trainer:
                     rt[k] = v
             return rt
 
+    def set_state(self, state, target):
+        if target == 'gen':
+            self.resolution = state['resolution']
+            self.G.module.load_state_dict(state['state_dict'])
+            # self.opt_g.load_state_dict(state['optimizer'])
+        elif target == 'dis':
+            self.resolution = state['resolution']
+            self.D.module.load_state_dict(state['state_dict'])
+ 
+        elif target == 'trainer':
+            for k, v in state.items():
+                if hasattr(self, k):
+                    self.__dict__[k] = v
+        print('Finish setting state: ', target)
+
+
     def snapshot(self, path):
         if not os.path.exists(path):
             if os.name == 'nt':
@@ -383,13 +381,41 @@ class trainer:
         if self.globalTick%self.config.TICK==0:
             if self.phase == 'gstablize' or self.phase =='dstablize' or self.phase == 'final':
                 save_path = os.path.join(path, out_name)
-                # if not os.path.exists(save_path):
-                dis_state = self.get_state('dis')
-                gen_state = self.get_state('gen')
-                trainer_state = self.get_state('trainer')
-                state = {'dis_state':dis_state, 'gen_state':gen_state, 'trainer_state':trainer_state}
-                torch.save(state, save_path)
-                print('[snapshot] model saved @ {}'.format(path))
+                if not os.path.exists(save_path):
+                    dis_state = self.get_state('dis')
+                    gen_state = self.get_state('gen')
+                    trainer_state = self.get_state('trainer')
+                    state = {'dis_state':dis_state, 'gen_state':gen_state, 'trainer_state':trainer_state}
+                    torch.save(state, save_path)
+                    print('[snapshot] model saved @ {}'.format(path))
+    
+    def load_pretrained(self, path):
+        if os.path.exists(path):
+            state = torch.load(path)
+            res = state['dis_state']['resolution']
+            for r in range(3, floor(res)+1):
+                print('Gronwing ', r)
+                self.G.module.grow_network(r)
+                self.D.module.grow_network(r)
+                if r < floor(res):
+                    self.G.module.flush_network()                
+                    self.D.module.flush_network()    
+            # import ipdb; ipdb.set_trace()
+            # import ipdb; ipdb.set_trace()
+            self.set_state(state['trainer_state'], 'trainer')
+            try:                
+                self.set_state(state['gen_state'], 'gen')
+            except:
+                self.G.module.flush_network()                
+                self.set_state(state['gen_state'], 'gen')
+
+            try:                
+                self.set_state(state['dis_state'], 'dis')
+            except:
+                self.D.module.flush_network()                
+                self.set_state(state['dis_state'], 'dis')
+
+            self.renew_everything()
 
 if __name__ == '__main__':
     ## perform training.

@@ -19,12 +19,12 @@ parser.add_argument('--nc', type=int, default=3)                # number of inpu
 parser.add_argument('--nz', type=int, default=512)              # input dimension of noise.
 parser.add_argument('--ngf', type=int, default=512)             # feature dimension of final layer of generator.
 parser.add_argument('--ndf', type=int, default=512)             # feature dimension of first layer of discriminator.
-parser.add_argument('--TICK', type=int, default=256)           # 1 tick = 1000 images = (1000/batch_size) iter.
+parser.add_argument('--TICK', type=int, default=1000)           # 1 tick = 1000 images = (1000/batch_size) iter.
 parser.add_argument('--max_resolution', type=int, default=7)          # 10-->1024, 9-->512, 8-->256
-parser.add_argument('--transition_tick', type=int, default=800)       # transition tick
-parser.add_argument('--stablize_tick', type=int, default=600)       # stabilization tick
+parser.add_argument('--transition_tick', type=int, default=200)       # transition tick
+parser.add_argument('--stablize_tick', type=int, default=150)       # stabilization tick
 parser.add_argument('--final_steps', type=int, default=500)       # stabilization tick
-parser.add_argument('--freq_print', type=int, default=10)       # stabilization tick
+parser.add_argument('--freq_print', type=int, default=5)       # stabilization tick
 
 
 ## network structure.
@@ -44,13 +44,14 @@ parser.add_argument('--flag_add_drift', type=bool, default=True)   # add drift l
 
 ## optimizer setting.
 parser.add_argument('--optimizer', type=str, default='adam')        # optimizer type.
+parser.add_argument('--pretrained', type=str, default=None)        # optimizer type.
 parser.add_argument('--beta1', type=float, default=0.0)             # beta1 for adam.
 parser.add_argument('--beta2', type=float, default=0.99)            # beta2 for adam.
 
 
 ## display and save setting.
 parser.add_argument('--use_tb', type=bool, default=True)            # enable tensorboard visualization
-parser.add_argument('--save_img_every', type=int, default=20)       # save images every specified iteration.
+parser.add_argument('--save_img_every', type=int, default=5)       # save images every specified iteration.
 parser.add_argument('--display_tb_every', type=int, default=5)      # display progress every specified iteration.
 
 

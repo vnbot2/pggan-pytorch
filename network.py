@@ -146,7 +146,6 @@ class Generator(nn.Module):
             print('[Generator]growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
             low_resolution_to_rgb = deepcopy_module(self.model, 'to_rgb_block')
             prev_block = nn.Sequential()
-            # prev_block.add_module('low_resolution_upsample', nn.Upsample(scale_factor=2, mode='nearest'))
             prev_block.add_module('low_resolution_upsample', up2x())
             prev_block.add_module('low_resolution_to_rgb', low_resolution_to_rgb)
 
@@ -156,7 +155,7 @@ class Generator(nn.Module):
             next_block.add_module('high_resolution_to_rgb', self.to_rgb_block(ndim))
 
             new_model.add_module('concat_block', ConcatTable(prev_block, next_block))
-            new_model.add_module('fadein_block', fadein_layer(self.config))
+            new_model.add_module('fadein_block', FadeinLayer(self.config))
             self.model = None
             self.model = new_model
             self.module_names = get_module_names(self.model)
@@ -255,12 +254,13 @@ class Discriminator(nn.Module):
         self.module_names = get_module_names(model)
         return model
     
-
-    def grow_network(self, resolution):
-            
+    # grow D
+    def grow_network(self, resolution):\
+        
         if resolution >= 3 and resolution <= 9:
             print('[Discriminator] growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
             low_resolution_from_rgb = deepcopy_module(self.model, 'from_rgb_block')
+            # import ipdb; ipdb.set_trace()
             prev_block = nn.Sequential()
             prev_block.add_module('low_resolution_downsample', nn.AvgPool2d(kernel_size=2))
             prev_block.add_module('low_resolution_from_rgb', low_resolution_from_rgb)
@@ -272,7 +272,7 @@ class Discriminator(nn.Module):
 
             new_model = nn.Sequential()
             new_model.add_module('concat_block', ConcatTable(prev_block, next_block))
-            new_model.add_module('fadein_block', fadein_layer(self.config))
+            new_model.add_module('fadein_block', FadeinLayer(self.config))
 
             # we make new network since pytorch does not support remove_module()
             names = get_module_names(self.model)

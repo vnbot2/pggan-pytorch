@@ -32,9 +32,9 @@ class Flatten(nn.Module):
 
 
 
-class fadein_layer(nn.Module):
+class FadeinLayer(nn.Module):
     def __init__(self, config):
-        super(fadein_layer, self).__init__()
+        super(FadeinLayer, self).__init__()
         self.alpha = 0.0
 
     def update_alpha(self, delta):
