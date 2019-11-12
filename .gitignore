@@ -45,3 +45,4 @@ runs/
 .idea/
 *.mp4
 *.avi
+.ipy*

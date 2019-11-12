@@ -22,7 +22,8 @@ parser.add_argument('--ndf', type=int, default=512)             # feature dimens
 parser.add_argument('--TICK', type=int, default=1000)           # 1 tick = 1000 images = (1000/batch_size) iter.
 parser.add_argument('--max_resolution', type=int, default=7)          # 10-->1024, 9-->512, 8-->256
 parser.add_argument('--transition_tick', type=int, default=200)       # transition tick
-parser.add_argument('--stablize_tick', type=int, default=200)       # stabilization tick
+parser.add_argument('--stablize_tick', type=int, default=150)       # stabilization tick
+parser.add_argument('--final_steps', type=int, default=1000)       # stabilization tick
 
 ## network structure.
 parser.add_argument('--flag_wn', type=bool, default=True)           # use of equalized-learning rate.

@@ -46,7 +46,6 @@ class MotoDataset(Dataset):
         self.size = size
         self.img_list  = glob.glob(os.path.join(root, '*', '*.png'))
         self.img_list  += glob.glob(os.path.join(root, '*', '*.jpg'))
-        # self.img_list  = self.img_list[:100]
         assert len(self.img_list) > 0, os.path.join(root, '*', '*.png')
         print('Load in mem...', 'size:', self.size)
         self.data = self._loaddata()
@@ -64,11 +63,12 @@ class MotoDataset(Dataset):
         return num_samples
 
     def __getitem__(self,idx):
-        img = self.data[idx%len(self.data)]
+        idx = np.random.choice(len(self.data))#idx%len(self.data)
+        img = self.data[idx]
         return img, 0
 
 
-def get_batch_size(size, bz_128=4):
+def get_batch_size(size, bz_128=1):
     num_pix = 128*128*bz_128
     rt = int(num_pix)//(size*size)
     print('size: {} -> Batchsize: {}'.format(size, rt))
@@ -78,8 +78,10 @@ class CustomDataloader:
     def __init__(self, config):
         self.root = config.train_data_root
         sizes = [4, 8, 16, 32, 64, 128]
-        self.batch_table = {size: get_batch_size(size) for size in sizes}
-        self.batchsize = int(self.batch_table[pow(2,2)])*torch.cuda.device_count()        # we start from 2^2=4
+        self.batch_table = {4:256, 8:128, 16:32, 32:16, 64:16, 128:16, 256:12, 512:3, 1024:1} # change this according to available gpu memory.
+
+        # self.batch_table = {size: get_batch_size(size) for size in sizes}
+        self.batchsize = int(self.batch_table[pow(2,2)])
         self.imsize = int(pow(2,2))
         self.num_workers = 4
         self.config = config
@@ -89,13 +91,17 @@ class CustomDataloader:
         self.batchsize = int(self.batch_table[pow(2,resolution)])
         self.imsize = int(pow(2,resolution))
         _n_stick = (self.config.transition_tick*2+self.config.stablize_tick*2)
-        _num_samples = self.batchsize * _n_stick
+        _num_samples = 5000000#self.batchsize * _n_stick
         print('[*] Renew dataloader configuration, load data from {}.'.format(self.root), 'Num of sample:', _num_samples, '\tImsize:', self.imsize, '\t Batchsize:', self.batchsize)
         self.dataset = MotoDataset(self.root, size=(self.imsize,self.imsize), num_samples=_num_samples)
+        # import ipdb; ipdb.set_trace()
         self.dl = DataLoader(
             dataset=self.dataset,
             batch_size=self.batchsize,
-            shuffle=True,) 
+            shuffle=False) 
+        # data = self.get_batch()
+        # print(data.shape)
+        # import ipdb; ipdb.set_trace()
 
     def __iter__(self):
         return iter(self.dl)
@@ -109,7 +115,7 @@ class CustomDataloader:
        
     def get_batch(self):
         dataIter = iter(self.dl)
-        return next(dataIter)[0].mul(2).add(-1)         # pixel range [-1, 1]
+        return next(dataIter)[0]#.mul(2).add(-1)         # pixel range [-1, 1]
 
 
         

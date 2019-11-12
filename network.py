@@ -61,6 +61,15 @@ def get_module_names(model):
     return names
 
 
+class up2x(nn.Module):
+    def __init__(self):
+        super(up2x, self).__init__()
+    def forward(self, x):
+        x = x
+        s = x.size(-1)*2
+        x = nn.functional.interpolate(x,  size=(s,s), mode='nearest', align_corners=None)
+        return x
+
 class Generator(nn.Module):
     def __init__(self, config):
         super(Generator, self).__init__()
@@ -100,7 +109,8 @@ class Generator(nn.Module):
                 ndim = ndim/2
         ndim = int(ndim)
         layers = []
-        layers.append(nn.Upsample(scale_factor=2, mode='bilinear'))       # scale up by factor of 2.0
+        # layers.append(nn.Upsample(scale_factor=2, mode='nearest'))       # scale up by factor of 2.0
+        layers.append(up2x())
         if halving:
             layers = deconv(layers, ndim*2, ndim, 3, 1, 1, self.flag_leaky, self.flag_bn, self.flag_wn, self.flag_pixelwise)
             layers = deconv(layers, ndim, ndim, 3, 1, 1, self.flag_leaky, self.flag_bn, self.flag_wn, self.flag_pixelwise)
@@ -133,10 +143,11 @@ class Generator(nn.Module):
                 new_model[-1].load_state_dict(module.state_dict())      # copy pretrained weights
             
         if resolution >= 3 and resolution <= 9:
-            print('growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
+            print('[Generator]growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
             low_resolution_to_rgb = deepcopy_module(self.model, 'to_rgb_block')
             prev_block = nn.Sequential()
-            prev_block.add_module('low_resolution_upsample', nn.Upsample(scale_factor=2, mode='bilinear'))
+            # prev_block.add_module('low_resolution_upsample', nn.Upsample(scale_factor=2, mode='nearest'))
+            prev_block.add_module('low_resolution_upsample', up2x())
             prev_block.add_module('low_resolution_to_rgb', low_resolution_to_rgb)
 
             inter_block, ndim, self.layer_name = self.intermediate_block(resolution)
@@ -248,7 +259,7 @@ class Discriminator(nn.Module):
     def grow_network(self, resolution):
             
         if resolution >= 3 and resolution <= 9:
-            print('growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
+            print('[Discriminator] growing network[{}x{} to {}x{}]. It may take few seconds...'.format(int(pow(2,resolution-1)), int(pow(2,resolution-1)), int(pow(2,resolution)), int(pow(2,resolution))))
             low_resolution_from_rgb = deepcopy_module(self.model, 'from_rgb_block')
             prev_block = nn.Sequential()
             prev_block.add_module('low_resolution_downsample', nn.AvgPool2d(kernel_size=2))
