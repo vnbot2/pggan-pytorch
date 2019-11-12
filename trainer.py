@@ -91,20 +91,23 @@ class trainer:
             self.stablize_tick = self.config.stablize_tick
         
         self.batchsize = self.loader.batchsize
-        delta = 1.0/(2*self.transition_tick+2*self.stablize_tick)
-        d_alpha = 1.0*self.batchsize/self.transition_tick/self.TICK
+        
+        total_tick = 2*(self.transition_tick+self.stablize_tick)
+
+        delta = 1.0/total_tick
+        self.d_alpha = 1.0*self.batchsize/self.transition_tick/self.TICK
 
         # update alpha if fade-in layer exist.
         if self.fadein['gen'] is not None:
             if self.resolution%1.0 < (self.transition_tick)*delta:
-                self.fadein['gen'].update_alpha(d_alpha)
+                self.fadein['gen'].update_alpha(self.d_alpha)
                 self.complete['gen'] = self.fadein['gen'].alpha*100
                 self.phase = 'gtransition'
             elif self.resolution%1.0 >= (self.transition_tick)*delta and self.resolution%1.0 < (self.transition_tick+self.stablize_tick)*delta:
                 self.phase = 'gstablize'
         if self.fadein['dis'] is not None:
-            if self.resolution%1.0 >= (self.transition_tick+self.stablize_tick)*delta and self.resolution%1.0 < (self.stablize_tick + self.transition_tick*2)*delta:
-                self.fadein['dis'].update_alpha(d_alpha)
+            if self.resolution % 1.0 >= 0.5 and self.resolution%1.0 < (self.stablize_tick + self.transition_tick*2)*delta:
+                self.fadein['dis'].update_alpha(self.d_alpha)
                 self.complete['dis'] = self.fadein['dis'].alpha*100
                 self.phase = 'dtransition'
             elif self.resolution%1.0 >= (self.stablize_tick + self.transition_tick*2)*delta and self.phase!='final':
@@ -112,7 +115,9 @@ class trainer:
             
         prev_kimgs = self.kimgs
         self.kimgs = self.kimgs + self.batchsize
-        if (self.kimgs%self.TICK) < (prev_kimgs%self.TICK):
+        ticked = '-'
+        if floor(prev_kimgs/self.TICK) < floor(self.kimgs/self.TICK) :
+            ticked = '+'
             self.globalTick = self.globalTick + 1
             # increase linearly every tick, and grow network structure.
             prev_resolution = floor(self.resolution)
@@ -122,7 +127,7 @@ class trainer:
             # flush network.
             if self.flag_flush_gen and self.resolution%1.0 >= (self.transition_tick+self.stablize_tick)*delta and prev_resolution!=2:
                 if self.fadein['gen'] is not None:
-                    self.fadein['gen'].update_alpha(d_alpha)
+                    self.fadein['gen'].update_alpha(self.d_alpha)
                     self.complete['gen'] = self.fadein['gen'].alpha*100
                 self.flag_flush_gen = False
                 self.G.module.flush_network()   # flush G
@@ -131,7 +136,7 @@ class trainer:
                 self.phase = 'dtransition'
             elif self.flag_flush_dis and floor(self.resolution) != prev_resolution and prev_resolution!=2:
                 if self.fadein['dis'] is not None:
-                    self.fadein['dis'].update_alpha(d_alpha)
+                    self.fadein['dis'].update_alpha(self.d_alpha)
                     self.complete['dis'] = self.fadein['dis'].alpha*100
                 self.flag_flush_dis = False
                 self.D.module.flush_network()   # flush and,
@@ -148,14 +153,14 @@ class trainer:
                 self.renew_everything()
                 self.fadein['gen'] = dict(self.G.module.model.named_children())['fadein_block']
                 self.fadein['dis'] = dict(self.D.module.model.named_children())['fadein_block']
-                self.flag_flush_gen = True
+                self.flag_flush_gen = True # next iter will flush
                 self.flag_flush_dis = True
 
             if floor(self.resolution) >= self.max_resolution and self.resolution%1.0 >= (self.stablize_tick + self.transition_tick*2)*delta:
                 self.phase = 'final'
                 self.resolution = self.max_resolution + (self.stablize_tick + self.transition_tick*2)*delta
 
-
+        return {'ticked':ticked}
             
     def renew_everything(self):
         # renew dataloader.
@@ -251,7 +256,7 @@ class trainer:
                 self.stack = int(self.stack%(ceil(len(self.loader.dataset))))
 
             # resolutionolution scheduler.
-            self.resolution_scheduler()
+            sched_results = self.resolution_scheduler()
             
             # zero gradients.
             self.G.zero_grad()
@@ -279,7 +284,13 @@ class trainer:
             self.opt_g.step()
             
             # logging.
-            log_msg = ' [E:{0}][T:{1}]  errD: {4:.4f} | errG: {5:.4f} | [lr:{11:.5f}][cur:{6:.3f}][resolution:{7:4}][{8}][{9:.1f}%][{10:.1f}%]'.format(self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resolution, int(pow(2,floor(self.resolution))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
+            log_msg = sched_results['ticked'] + ' [E:{0}][T:{1}]  errD: {4:.4f} | errG: {5:.4f} | [lr:{11:.5f}][cur:{6:.3f}][resolution:{7:4}][{8}]'.format(self.epoch, self.globalTick, self.stack, len(self.loader.dataset), loss_d.item(), loss_g.item(), self.resolution, int(pow(2,floor(self.resolution))), self.phase, self.complete['gen'], self.complete['dis'], self.lr)
+            if hasattr(self, 'fadein') and self.fadein['dis'] is not None:
+                log_msg += '|D-Alpha:{:0.2f}'.format(self.fadein['dis'].alpha)
+                
+            if hasattr(self, 'fadein') and self.fadein['gen'] is not None:
+                log_msg += '|G-Alpha:{:0.2f}'.format(self.fadein['gen'].alpha)
+
             print(log_msg)
             if self.phase == 'final':
                 final_step+=1

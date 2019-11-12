@@ -68,9 +68,10 @@ class MotoDataset(Dataset):
         return img, 0
 
 
-def get_batch_size(size, bz_128=1):
+def get_batch_size(size, bz_128, tick):
     num_pix = 128*128*bz_128
     rt = int(num_pix)//(size*size)
+    rt = min(tick, rt)
     print('size: {} -> Batchsize: {}'.format(size, rt))
     return rt
 
@@ -78,30 +79,25 @@ class CustomDataloader:
     def __init__(self, config):
         self.root = config.train_data_root
         sizes = [4, 8, 16, 32, 64, 128]
-        self.batch_table = {4:256, 8:128, 16:32, 32:16, 64:16, 128:16, 256:12, 512:3, 1024:1} # change this according to available gpu memory.
+        # self.batch_table = {4:256, 8:128, 16:32, 32:16, 64:16, 128:16} # change this according to available gpu memory.
 
-        # self.batch_table = {size: get_batch_size(size) for size in sizes}
+        self.batch_table = {size: get_batch_size(size, bz_128=16, tick=config.TICK) for size in sizes}
         self.batchsize = int(self.batch_table[pow(2,2)])
         self.imsize = int(pow(2,2))
         self.num_workers = 4
         self.config = config
         
     def renew(self, resolution):
-        
         self.batchsize = int(self.batch_table[pow(2,resolution)])
         self.imsize = int(pow(2,resolution))
         _n_stick = (self.config.transition_tick*2+self.config.stablize_tick*2)
-        _num_samples = 5000000#self.batchsize * _n_stick
+        _num_samples = 100000
         print('[*] Renew dataloader configuration, load data from {}.'.format(self.root), 'Num of sample:', _num_samples, '\tImsize:', self.imsize, '\t Batchsize:', self.batchsize)
         self.dataset = MotoDataset(self.root, size=(self.imsize,self.imsize), num_samples=_num_samples)
-        # import ipdb; ipdb.set_trace()
         self.dl = DataLoader(
             dataset=self.dataset,
             batch_size=self.batchsize,
             shuffle=False) 
-        # data = self.get_batch()
-        # print(data.shape)
-        # import ipdb; ipdb.set_trace()
 
     def __iter__(self):
         return iter(self.dl)
