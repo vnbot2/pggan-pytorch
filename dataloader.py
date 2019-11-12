@@ -82,18 +82,19 @@ class CustomDataloader:
         self.batch_table = {4:256, 8:128, 16:32, 32:16, 64:16, 128:16} # change this according to available gpu memory.
 
         # self.batch_table = {size: get_batch_size(size, bz_128=16, tick=config.TICK) for size in sizes}
-        self.batchsize = int(self.batch_table[pow(2,2)])
+        self.batchsize = int(self.batch_table[pow(2,2)])*torch.cuda.device_count()
         self.imsize = int(pow(2,2))
         self.num_workers = 4
         self.config = config
         
     def renew(self, resolution):
-        self.batchsize = int(self.batch_table[pow(2,resolution)])
+        self.batchsize = int(self.batch_table[pow(2,resolution)])*torch.cuda.device_count()
         self.imsize = int(pow(2,resolution))
         _n_stick = (self.config.transition_tick*2+self.config.stablize_tick*2)
         _num_samples = 1050000
-        print('[*] Renew dataloader configuration, load data from {}.'.format(self.root), 'Num of sample:', _num_samples, '\tImsize:', self.imsize, '\t Batchsize:', self.batchsize)
         self.dataset = MotoDataset(self.root, size=(self.imsize,self.imsize), num_samples=_num_samples)
+        print('[*] Renew dataloader configuration, load data from {}.'.format(self.root), 'Num of sample:', _num_samples, 
+        '\tImsize:', self.imsize, '\t Batchsize:', self.batchsize)
         self.dl = DataLoader(
             dataset=self.dataset,
             batch_size=self.batchsize,
